@@ -7,18 +7,12 @@
 #pragma comment(lib, "winmm.lib")
 
 #define	WAIT_EXIT_EVENT	WAIT_OBJECT_0
-#define WAIT_SIGNAL WAIT_OBJECT_0 + 1
-
-#define NOP	WAIT_OBJECT_0 + 20
-#define NOP1	WAIT_OBJECT_0 + 21
-#define NOP2	WAIT_OBJECT_0 + 22
 
 #define TOTAL_THREAD_CNT	5
 #define	EXIT_AFTER_N_SEC	20
 
 int g_Data = 0;
 int g_Connect = 0;
-//int g_Shutdown = false;
 
 HANDLE hAcceptThread;
 HANDLE hDisconnectThread;
@@ -29,13 +23,6 @@ HANDLE hUpdateThread3;
 HANDLE hThreadArr[TOTAL_THREAD_CNT];
 
 HANDLE hEventExitThread;
-HANDLE hEventAccept;
-HANDLE hEventDisconnect;
-HANDLE hEventUpdate;
-
-HANDLE hEventArrForAcceptThread[2];
-HANDLE hEventArrForDisconnectThread[2];
-HANDLE hEventArrForUpdateThread[2];
 /*
 	초기화 함수
 */
@@ -71,8 +58,8 @@ void UpdateMainThread()
 		switch (result)
 		{
 		case WAIT_TIMEOUT:
-			printf("g_Connect: %d\n", g_Connect);
 			countPerSec += 1;
+			printf("[%d sec]g_Connect: %d\n", countPerSec, g_Connect);
 			if (countPerSec == EXIT_AFTER_N_SEC)
 			{
 				waitTime = INFINITE;
@@ -85,9 +72,6 @@ void UpdateMainThread()
 
 		break;
 	}
-	
-	
-	printf("경과시간: %d초\n", (timeGetTime() - startTime) / 1000);
 
 	printf("스레드 종료 완료\n");
 }
@@ -114,33 +98,6 @@ bool Init()
 		printf("Exit 이벤트객체 생성 실패: %d", GetLastError());		
 		return false;
 	}
-	hEventAccept = CreateEvent(nullptr, false, false, L"AcceptEvent");
-	if (hEventAccept == nullptr)
-	{
-		printf("Accept 이벤트객체 생성 실패: %d", GetLastError());
-		return false;
-	}
-	hEventDisconnect = CreateEvent(nullptr, false, false, L"DisconnectEvent");
-	if (hEventDisconnect == nullptr)
-	{
-		printf("Disconnect 이벤트객체 생성 실패: %d", GetLastError());
-		return false;
-	}
-	hEventUpdate = CreateEvent(nullptr, false, false, L"UpdateEvent");
-	if (hEventUpdate == nullptr)
-	{
-		printf("Update 이벤트객체 생성 실패: %d", GetLastError());
-		return false;
-	}
-	
-	hEventArrForAcceptThread[0] = hEventExitThread;
-	hEventArrForAcceptThread[1] = hEventAccept;
-
-	hEventArrForDisconnectThread[0] = hEventExitThread;
-	hEventArrForDisconnectThread[1] = hEventDisconnect;
-
-	hEventArrForUpdateThread[0] = hEventExitThread;
-	hEventArrForUpdateThread[1] = hEventUpdate;
 	
 	hAcceptThread = (HANDLE)_beginthreadex(nullptr, 0, AcceptThread, nullptr, 0, nullptr);
 	if (hAcceptThread == nullptr)
@@ -170,7 +127,7 @@ bool Init()
 	hUpdateThread3 = (HANDLE)_beginthreadex(nullptr, 0, UpdateThread, (void*)3, 0, nullptr);
 	if (hUpdateThread3 == nullptr)
 	{
-		printf("접속 스레드 생성 실패: %d", GetLastError());
+		printf("Update 스레드3 생성 실패: %d", GetLastError());
 		return false;
 	}
 
@@ -185,14 +142,9 @@ bool Init()
 void CleanUp()
 {
 	CloseHandle(hEventExitThread);
-	CloseHandle(hEventAccept);
-	CloseHandle(hEventDisconnect);
-	CloseHandle(hEventUpdate);
 
 	timeEndPeriod(1);
 }
-
-#define _MT
 
 DWORD waitTime1;
 unsigned _stdcall AcceptThread(void* args)
@@ -205,7 +157,7 @@ unsigned _stdcall AcceptThread(void* args)
 	DWORD waitTime = rand() % 901 + 100;
 	for (;;)
 	{
-		result = WaitForMultipleObjects(2, hEventArrForAcceptThread, false, waitTime);
+		result = WaitForSingleObject(hEventExitThread, waitTime);
 		switch (result)
 		{
 		case WAIT_EXIT_EVENT:
@@ -233,10 +185,9 @@ unsigned _stdcall DisconnectThread(void* args)
 	DWORD errorCode;
 	DWORD result;
 	DWORD waitTime = rand() % 901 + 100;
-	int decrementCnt;
 	for (;;)
 	{
-		result = WaitForMultipleObjects(2, hEventArrForDisconnectThread, false, waitTime);
+		result = WaitForSingleObject(hEventExitThread, waitTime);
 		switch (result)
 		{
 		case WAIT_EXIT_EVENT:
@@ -244,10 +195,18 @@ unsigned _stdcall DisconnectThread(void* args)
 			return 0;
 		case WAIT_TIMEOUT:
 			waitTime = rand() % 901 + 100;
-			
+
+			if (InterlockedCompareExchange((long*)&g_Connect, 0, 0) == 0)
+			{
+				continue;
+			}
+
 			for (DWORD i = 0; i < waitTime; ++i)
 			{
-				InterlockedDecrement((long*)&g_Connect);
+				if (InterlockedDecrement((long*)&g_Connect) == 0)
+				{
+					break;
+				}
 			}
 			continue;
 		case WAIT_FAILED:
@@ -266,19 +225,12 @@ unsigned _stdcall UpdateThread(void* args)
 	int data;
 	for (;;)
 	{
-		result = WaitForMultipleObjects(2, hEventArrForUpdateThread, false, 10);
+		result = WaitForSingleObject(hEventExitThread, 10);
 		switch (result)
 		{
 		case WAIT_EXIT_EVENT:
 			printf("Update 스레드%lld 종료\n", (long long)args);
 			return 0;
-		case WAIT_SIGNAL:
-			data = InterlockedIncrement((long*)&g_Data);
-			if (data % 1000 == 0)
-			{
-				printf("g_Data: %d\n", data);
-			}
-			break;
 		case WAIT_TIMEOUT:
 			data = InterlockedIncrement((long*)&g_Data);
 			if (data % 1000 == 0)
