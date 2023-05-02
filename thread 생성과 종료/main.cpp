@@ -46,6 +46,86 @@ unsigned _stdcall DisconnectThread(void* args);
 */
 unsigned _stdcall UpdateThread(void* args);
 
+int main(void)
+{
+	if (!Init())
+	{
+		CleanUp();
+		return -1;
+	}
+
+	UpdateMainThread();
+	CleanUp();
+	return 0;
+}
+
+bool Init()
+{
+	timeBeginPeriod(1);
+
+	hEventExitThread = CreateEvent(nullptr, true, false, L"ExitThread");
+	if (hEventExitThread == nullptr)
+	{
+		printf("Exit 이벤트객체 생성 실패: %d", GetLastError());
+		return false;
+	}
+
+	hAcceptThread = (HANDLE)_beginthreadex(nullptr, 0, AcceptThread, nullptr, 0, nullptr);
+	if (hAcceptThread == nullptr)
+	{
+		SetEvent(hEventExitThread);
+		printf("Accept 스레드 생성 실패: %d", GetLastError());
+		return false;
+	}
+	hDisconnectThread = (HANDLE)_beginthreadex(nullptr, 0, DisconnectThread, nullptr, 0, nullptr);
+	if (hDisconnectThread == nullptr)
+	{
+		SetEvent(hEventExitThread);
+		printf("Disconnect 스레드 생성 실패: %d", GetLastError());
+		return false;
+	}
+
+	hUpdateThread1 = (HANDLE)_beginthreadex(nullptr, 0, UpdateThread, (void*)1, 0, nullptr);
+	if (hUpdateThread1 == nullptr)
+	{
+		SetEvent(hEventExitThread);
+		printf("Update 스레드1 생성 실패: %d", GetLastError());
+		return false;
+	}
+	hUpdateThread2 = (HANDLE)_beginthreadex(nullptr, 0, UpdateThread, (void*)2, 0, nullptr);
+	if (hUpdateThread2 == nullptr)
+	{
+		SetEvent(hEventExitThread);
+		printf("Update 스레드2 생성 실패: %d", GetLastError());
+		return false;
+	}
+	hUpdateThread3 = (HANDLE)_beginthreadex(nullptr, 0, UpdateThread, (void*)3, 0, nullptr);
+	if (hUpdateThread3 == nullptr)
+	{
+		SetEvent(hEventExitThread);
+		printf("Update 스레드3 생성 실패: %d", GetLastError());
+		return false;
+	}
+
+	hThreadArr[0] = hAcceptThread;
+	hThreadArr[1] = hDisconnectThread;
+	hThreadArr[2] = hUpdateThread1;
+	hThreadArr[3] = hUpdateThread2;
+	hThreadArr[4] = hUpdateThread3;
+	return true;
+}
+
+void CleanUp()
+{
+	CloseHandle(hEventExitThread);
+	CloseHandle(hAcceptThread);
+	CloseHandle(hDisconnectThread);
+	CloseHandle(hUpdateThread1);
+	CloseHandle(hUpdateThread2);
+	CloseHandle(hUpdateThread3);
+	timeEndPeriod(1);
+}
+
 void UpdateMainThread()
 {
 	static DWORD startTime = timeGetTime();
@@ -76,75 +156,7 @@ void UpdateMainThread()
 	printf("스레드 종료 완료\n");
 }
 
-int main(void)
-{
-	if (!Init())
-	{
-		return -1;
-	}
 
-	UpdateMainThread();
-	CleanUp();
-	return 0;
-}
-
-bool Init()
-{
-	timeBeginPeriod(1);
-
-	hEventExitThread = CreateEvent(nullptr, true, false, L"ExitThread");
-	if (hEventExitThread == nullptr)
-	{
-		printf("Exit 이벤트객체 생성 실패: %d", GetLastError());		
-		return false;
-	}
-	
-	hAcceptThread = (HANDLE)_beginthreadex(nullptr, 0, AcceptThread, nullptr, 0, nullptr);
-	if (hAcceptThread == nullptr)
-	{
-		printf("Accept 스레드 생성 실패: %d", GetLastError());
-		return false;
-	}
-	hDisconnectThread = (HANDLE)_beginthreadex(nullptr, 0, DisconnectThread, nullptr, 0, nullptr);
-	if (hDisconnectThread == nullptr)
-	{
-		printf("Disconnect 스레드 생성 실패: %d", GetLastError());
-		return false;
-	}
-
-	hUpdateThread1 = (HANDLE)_beginthreadex(nullptr, 0, UpdateThread, (void*)1, 0, nullptr);
-	if (hUpdateThread1 == nullptr)
-	{
-		printf("Update 스레드1 생성 실패: %d", GetLastError());
-		return false;
-	}
-	hUpdateThread2 = (HANDLE)_beginthreadex(nullptr, 0, UpdateThread, (void*)2, 0, nullptr);
-	if (hUpdateThread2 == nullptr)
-	{
-		printf("Update 스레드2 생성 실패: %d", GetLastError());
-		return false;
-	}
-	hUpdateThread3 = (HANDLE)_beginthreadex(nullptr, 0, UpdateThread, (void*)3, 0, nullptr);
-	if (hUpdateThread3 == nullptr)
-	{
-		printf("Update 스레드3 생성 실패: %d", GetLastError());
-		return false;
-	}
-
-	hThreadArr[0] = hAcceptThread;
-	hThreadArr[1] = hDisconnectThread;
-	hThreadArr[2] = hUpdateThread1;
-	hThreadArr[3] = hUpdateThread2;
-	hThreadArr[4] = hUpdateThread3;
-	return true;
-}
-
-void CleanUp()
-{
-	CloseHandle(hEventExitThread);
-
-	timeEndPeriod(1);
-}
 
 unsigned _stdcall AcceptThread(void* args)
 {
