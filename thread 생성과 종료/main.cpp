@@ -146,10 +146,8 @@ void CleanUp()
 	timeEndPeriod(1);
 }
 
-DWORD waitTime1;
 unsigned _stdcall AcceptThread(void* args)
 {
-	
 	srand((unsigned int)_time32(nullptr) + 200);
 
 	DWORD errorCode;
@@ -177,7 +175,6 @@ unsigned _stdcall AcceptThread(void* args)
 	return 0;
 }
 
-DWORD waitTime2;
 unsigned _stdcall DisconnectThread(void* args)
 {
 	srand((unsigned int)_time32(nullptr) + 100);
