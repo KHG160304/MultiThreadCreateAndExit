@@ -1,4 +1,4 @@
-#define _WINSOCKAPI_
+﻿#define _WINSOCKAPI_
 #include <windows.h>
 #include <synchapi.h>
 #include "SpinLock.h"
